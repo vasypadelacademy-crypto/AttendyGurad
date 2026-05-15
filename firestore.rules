@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitives & Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    
+    // Master Admins: Bypasses for the app developers and primary owner
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'vasy.padelacademy@gmail.com' ||
+        request.auth.token.email.lower() == 'momen.ismail100@gmail.com'
+      );
+    }
+
+    // RBAC: Check if the user has an admin role in their appUsers document
+    function isAdmin() { 
+      return isMasterAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/appUsers/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/appUsers/$(request.auth.uid)).data.role == 'admin'
+      ); 
+    }
+    
+    function isOwner(data) { return isSignedIn() && data.ownerId == request.auth.uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\\\-]+$'); }
+
+    // --- Entity Validation Blueprints ---
+
+    function isValidPlayer(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'createdAt']) && 
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.ownerId is string &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 100)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('isActive' in data) || data.isActive is bool) &&
+             (!('tag' in data) || (data.tag is string && data.tag.size() <= 50)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
+    function isValidPackage(data) {
+      return data.keys().hasAll(['playerId', 'packageTypeCode', 'startDate', 'ownerId', 'createdAt']) &&
+             data.playerId is string && data.packageTypeCode is string &&
+             data.startDate is string && data.startDate.size() == 10 &&
+             data.ownerId is string &&
+             (!('totalDue' in data) || data.totalDue is number) &&
+             (!('paidAmount' in data) || data.paidAmount is number) &&
+             (!('status' in data) || data.status is string) &&
+             (!('effectiveMonth' in data) || data.effectiveMonth is string) &&
+             (!('note' in data) || data.note is string);
+    }
+
+    function isValidSession(data) {
+      // DataContext adds ownerId, createdAt, addedBy
+      return data.keys().hasAll(['packageId', 'playerId', 'date', 'status', 'ownerId', 'createdAt']) &&
+             data.packageId is string && data.playerId is string &&
+             data.date is string && data.date.size() == 10 &&
+             data.status is string &&
+             (!('startTime' in data) || data.startTime is string) &&
+             (!('locationId' in data) || data.locationId is string) &&
+             (!('value' in data) || data.value is number) &&
+             (!('discount' in data) || data.discount is number);
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['packageId', 'amount', 'date', 'ownerId', 'createdAt']) &&
+             data.packageId is string && data.amount is number && 
+             data.date is string && data.date.size() == 10;
+    }
+
+    function isValidAppUser(data) {
+      return data.keys().hasAll(['email', 'role', 'ownerId', 'createdAt']) &&
+             data.email is string && data.role is string &&
+             data.role in ['admin', 'coach', 'visitor'];
+    }
+
+    // --- Collection Routes ---
+
+    // Master Reference Data (Only Admins can write)
+    match /packageTypes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(id);
+    }
+    match /locations/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(id);
+    }
+    match /levels/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(id);
+    }
+    match /pricingSchemes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(id);
+    }
+    match /groups/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(id);
+    }
+
+    // System Users & RBAC
+    match /appUsers/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && (isMasterAdmin() || isAdmin() || (request.auth.uid == uid && incoming().role == 'visitor'));
+      allow update: if isMasterAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow delete: if isMasterAdmin() || (isAdmin() && request.auth.uid != uid);
+    }
+
+    // Core Business Data: Players
+    match /players/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(id) && isValidPlayer(incoming()) && 
+                       incoming().ownerId == request.auth.uid && 
+                       incoming().createdAt == request.time;
+      allow update: if (isOwner(existing()) || isAdmin()) && isValidId(id) && 
+                       isValidPlayer(incoming()) && 
+                       incoming().ownerId == existing().ownerId;
+      allow delete: if isAdmin();
+    }
+
+    // Core Business Data: Packages
+    match /packages/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(id) && isValidPackage(incoming()) && 
+                       incoming().ownerId == request.auth.uid && 
+                       incoming().createdAt == request.time &&
+                       exists(/databases/$(database)/documents/players/$(incoming().playerId));
+      allow update: if (isOwner(existing()) || isAdmin()) && isValidId(id) && 
+                       isValidPackage(incoming()) && 
+                       incoming().ownerId == existing().ownerId;
+      allow delete: if isOwner(existing()) || isAdmin();
+    }
+
+    // Core Business Data: Sessions
+    match /sessions/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(id) && isValidSession(incoming()) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().createdAt == request.time;
+      allow update: if (isOwner(existing()) || isAdmin()) && isValidId(id) && 
+                       isValidSession(incoming()) &&
+                       incoming().ownerId == existing().ownerId;
+      allow delete: if isOwner(existing()) || isAdmin();
+    }
+
+    // Core Business Data: Payments
+    match /payments/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(id) && isValidPayment(incoming()) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(id) && isValidPayment(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Supporting Data: Reminders
+    match /reminders/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow write: if isSignedIn() && isValidId(id);
+    }
+
+    // Supporting Data: Evaluations
+    match /evaluations/{id} {
+      allow read: if isSignedIn() && (isOwner(existing()) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(id);
+      allow update: if (isOwner(existing()) || isAdmin()) && isValidId(id);
+      allow delete: if isAdmin();
+    }
+  }
+}

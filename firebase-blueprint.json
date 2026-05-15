@@ -1,0 +1,184 @@
+{
+  "entities": {
+    "PackageType": {
+      "title": "Package Type",
+      "description": "Defines names like Private, G2, G3, G4, G5",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" }
+      },
+      "required": ["name", "code"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "Training location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "gps": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "addedBy": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Level": {
+      "title": "Level",
+      "description": "Player skill level",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "PricingScheme": {
+      "title": "Pricing Scheme",
+      "description": "Session value based on package and effective month",
+      "type": "object",
+      "properties": {
+        "effectiveMonth": { "type": "string", "format": "date" },
+        "packageTypeCode": { "type": "string" },
+        "numSessions": { "type": "number" },
+        "sessionValue": { "type": "number" }
+      },
+      "required": ["effectiveMonth", "packageTypeCode", "numSessions", "sessionValue"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "Defines training groups like G2-BUE, etc.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" }
+      },
+      "required": ["name", "code"]
+    },
+    "AppUser": {
+      "title": "App User",
+      "description": "System access and RBAC",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "coach", "visitor"] },
+        "locationIds": { "type": "array", "items": { "type": "string" } },
+        "ownerId": { "type": "string" },
+        "forcePasswordChange": { "type": "boolean" }
+      },
+      "required": ["email", "role"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Main player profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "levelId": { "type": "string" },
+        "locationId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "packageTypeCode": { "type": "string" },
+        "numSessions": { "type": "number" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "Package": {
+      "title": "Package Instance",
+      "description": "A specific registration/subscription for a player",
+      "type": "object",
+      "properties": {
+        "playerId": { "type": "string" },
+        "packageTypeCode": { "type": "string" },
+        "numSessions": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "totalDue": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Paid", "Partially Paid", "Not Paid"] },
+        "effectiveMonth": { "type": "string" },
+        "note": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["playerId", "packageTypeCode", "startDate", "ownerId", "createdAt"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "Individual training session session",
+      "type": "object",
+      "properties": {
+        "packageId": { "type": "string" },
+        "playerId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "startTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["Scheduled", "Attended", "Absent", "Regret", "Cancelled", "Compensated", "Hold"] },
+        "locationId": { "type": "string" },
+        "comment": { "type": "string" },
+        "sessionIndex": { "type": "string" },
+        "value": { "type": "number" },
+        "discount": { "type": "number" }
+      },
+      "required": ["packageId", "playerId", "date", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment records for a package",
+      "type": "object",
+      "properties": {
+        "packageId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["packageId", "amount", "date"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "System alerts",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["SessionLeft", "FinancialPending"] },
+        "relatedId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Unread", "Read"] },
+        "message": { "type": "string" }
+      },
+      "required": ["type", "relatedId", "status"]
+    },
+    "Evaluation": {
+      "title": "Evaluation",
+      "description": "Skill assessment for a player",
+      "type": "object",
+      "properties": {
+        "playerId": { "type": "string" },
+        "locationId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "level": { "type": "string" },
+        "skillScores": { "type": "array", "items": { "type": "object" } },
+        "totalSkillsCount": { "type": "number" },
+        "passedSkillsCount": { "type": "number" },
+        "percentage": { "type": "number" },
+        "coachId": { "type": "string" },
+        "coachName": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["playerId", "date", "level", "percentage"]
+    }
+  },
+  "firestore": {
+    "/packageTypes/{id}": { "schema": "PackageType", "description": "Global package types" },
+    "/locations/{id}": { "schema": "Location", "description": "Training locations" },
+    "/levels/{id}": { "schema": "Level", "description": "Skill levels" },
+    "/pricingSchemes/{id}": { "schema": "PricingScheme", "description": "Pricing configuration table" },
+    "/players/{id}": { "schema": "Player", "description": "Player directory" },
+    "/packages/{id}": { "schema": "Package", "description": "Subscriptions and packages" },
+    "/sessions/{id}": { "schema": "Session", "description": "Attendance history and schedule" },
+    "/payments/{id}": { "schema": "Payment", "description": "Cash flow records" },
+    "/reminders/{id}": { "schema": "Reminder", "description": "Alerts for sessions and payments" },
+    "/groups/{id}": { "schema": "Group", "description": "Training groups" },
+    "/appUsers/{id}": { "schema": "AppUser", "description": "System Users" },
+    "/evaluations/{id}": { "schema": "Evaluation", "description": "Player skill assessments" }
+  }
+}
